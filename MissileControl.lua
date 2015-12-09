@@ -198,7 +198,8 @@ end
 -- TargetControl
 TargetControl = {
     targets = {},
-    hasTargets = false
+    numTargets = 0,
+    targetIdTable = {}
 }
 
 function TargetControl:new(I)
@@ -209,38 +210,46 @@ end
 
 function TargetControl:update(I)
     local targets = {}
-    local hasTargets = false
+--    local hasTargets = false
+    local numTargets = 0
+    local targetIdTable = {}
+    local targetIdTableInd = 0
     for i = 0, I:GetNumberOfMainframes(), 1 do
         for j = 0, I:GetNumberOfTargets(i), 1 do
             local targetInfo = I:GetTargetInfo(i, j)
             if targetInfo.Valid then
+
 --                local targetPositionInfo = I:GetTargetPositionInfo(i, j)
-                targets[targetInfo] = I:GetTargetPositionInfo(i, j)
-                hasTargets = true
+                targets[targetInfo.Id] = {
+                    targetInfo=targetInfo,
+                    targetPositionInfo=I:GetTargetPositionInfo(i, j)
+                }
+                targetIdTable[numTargets+1] = targetInfo.Id
+                numTargets = numTargets + 1
+--                targets[targetInfo] = I:GetTargetPositionInfo(i, j)
+--                hasTargets = true
             end
         end
     end
-    self.hasTargets = hasTargets
+--    self.hasTargets = hasTargets
+    self.targetIdTable = targetIdTable
+    self.numTargets = numTargets
     self.targets = targets
 end
 
-function TargetControl:updateTargets(I)
-
-end
-
 function TargetControl:getHasTargets()
-    return self.hasTargets
+    return self.numTargets ~= 0
 end
 
 function TargetControl:getClosestTarget(I, position)
     local curTargetInfo
     local curTargetPositionInfo
     local minDistance
-    for targetInfo, targetPositionInfo in pairs(self.targets) do
-        local curDistance = Vector3.Distance(position, targetInfo.AimPointPosition)
+    for targetId, targetPair in pairs(self.targets) do
+        local curDistance = Vector3.Distance(position, targetPair.targetInfo.AimPointPosition)
         if curTargetInfo == nil or curDistance < minDistance then
-            curTargetInfo = targetInfo
-            curTargetPositionInfo = targetPositionInfo
+            curTargetInfo = targetPair.targetInfo
+            curTargetPositionInfo = targetPair.targetPositionInfo
             minDistance = curDistance
         end
     end
@@ -248,27 +257,41 @@ function TargetControl:getClosestTarget(I, position)
 end
 
 function TargetControl:getRandomTargetId(I)
-    local targetList = {}
---    local targetPositionList = {}
-    for targetInfo, targetPosition in pairs(self.targets) do
-        targetList[table.getn(targetList)+1] = targetInfo.Id
---        targetPositionList[table.getn(targetPositionList)] = targetPosition
-    end
-    local tableLen = table.getn(targetList)
-    if tableLen > 0 then
-        local choice = math.floor(math.random() * tableLen)
-        return targetList[choice]
-    else
+    if self.numTargets < 1 then
         return nil
     end
+    local ind = math.floor(math.random() * self.numTargets) + 1
+    local id = self.targetIdTable[ind]
+    if id == nil then
+        I:Log("attempt to access targets with ind: " .. ind .. " idtable has " .. table.getn(self.targetIdTable) .. " elements")
+        local x = 1/0
+    end
+    return id
+--    local targetList = {}
+----    local targetPositionList = {}
+--    for targetInfo, targetPosition in pairs(self.targets) do
+--        targetList[table.getn(targetList)+1] = targetInfo.Id
+----        targetPositionList[table.getn(targetPositionList)] = targetPosition
+--    end
+--    local tableLen = table.getn(targetList)
+--    if tableLen > 0 then
+--        local choice = math.floor(math.random() * tableLen)
+--        return targetList[choice]
+--    else
+--        return nil
+--    end
 end
 
 function TargetControl:getTarget(I, id)
-    for targetInfo, targetPosition in pairs(self.targets) do
-        if targetInfo.Id == id then
-            return targetInfo, targetPosition
-        end
+    local targetPair = self.targets[id]
+    if targetPair ~= nil then
+        return  targetPair.targetInfo, targetPair.targetPositionInfo
     end
+--    for targetInfo, targetPosition in pairs(self.targets) do
+--        if targetInfo.Id == id then
+--            return targetInfo, targetPosition
+--        end
+--    end
     return nil, nil
 end
 
