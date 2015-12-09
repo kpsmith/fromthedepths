@@ -19,13 +19,6 @@ function weaponsOfType(I, weaponType)
     return weapons
 end
 
-function vectorDistance(vectorA, vectorB)
-    return Vector3(
-        vectorA.x - vectorB.x,
-        vectorA.y - vectorB.y,
-        vectorA.z - vectorB.z).magnitude
-end
-
 function logVector(I, v)
     I:Log(v.x .. " " .. v.y .. " " .. v.z)
 end
@@ -122,6 +115,7 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
     else
         targetId = self.missileTargets[missileWarningInfo.Id]
     end
+--    I:Log(targetId)
     if targetId ~= nil then
         targetInfo, targetPositionInfo = TargetControl:getTarget(I, targetId)
     end
@@ -142,6 +136,7 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
     -- cruise
     local adjustedLaunchHeight = self.cruiseAltitude - self.estimatedTurningRadius
     if missileWarningInfo.TimeSinceLaunch < 4 and missileWarningInfo.Position.y < adjustedLaunchHeight then
+        -- reach cruise altitude
         I:SetLuaControlledMissileAimPoint(
             luaTransceiverIndex,
             missileIndex,
@@ -150,6 +145,7 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
             missileWarningInfo.Position.z
         )
     elseif targetInfo == nil then
+        -- idle
         I:SetLuaControlledMissileAimPoint(
             luaTransceiverIndex,
             missileIndex,
@@ -157,6 +153,7 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
             300,
             missileWarningInfo.Position.z)
     elseif targetGroundDistance > self.beginStrikeDistance then
+        -- cruise
         I:SetLuaControlledMissileAimPoint(
             luaTransceiverIndex,
             missileIndex,
@@ -164,6 +161,7 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
             math.max(aimpoint.y, self.cruiseAltitude),
             aimpoint.z)
     else
+        -- strike
         I:SetLuaControlledMissileAimPoint(
             luaTransceiverIndex,
             missileIndex,
@@ -172,7 +170,7 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
             aimpoint.z)
     end
     local detonate = false
-    -- detonate on target
+    -- detonation
     if targetInfo ~= nil and targetDistance < self.armingDistance then
         -- under arming distance, detonate if we become further from the target
         if self.missileLog[missileWarningInfo.Id] ~= nil then
@@ -188,9 +186,6 @@ function MissileControl:guidance(I ,luaTransceiverIndex, missileIndex)
         end
 
     end
---    if targetInfo ~= nil and targetDistance < self.detonationDistance then
---        detonate = true
---    end
     -- kill old missiles
     if missileWarningInfo.TimeSinceLaunch > 20 then
         detonate = true
@@ -219,7 +214,7 @@ function TargetControl:update(I)
         for j = 0, I:GetNumberOfTargets(i), 1 do
             local targetInfo = I:GetTargetInfo(i, j)
             if targetInfo.Valid then
-                local targetPositionInfo = I:GetTargetPositionInfo(i, j)
+--                local targetPositionInfo = I:GetTargetPositionInfo(i, j)
                 targets[targetInfo] = I:GetTargetPositionInfo(i, j)
                 hasTargets = true
             end
@@ -227,6 +222,10 @@ function TargetControl:update(I)
     end
     self.hasTargets = hasTargets
     self.targets = targets
+end
+
+function TargetControl:updateTargets(I)
+
 end
 
 function TargetControl:getHasTargets()
@@ -252,7 +251,7 @@ function TargetControl:getRandomTargetId(I)
     local targetList = {}
 --    local targetPositionList = {}
     for targetInfo, targetPosition in pairs(self.targets) do
-        targetList[table.getn(targetList)] = targetInfo.Id
+        targetList[table.getn(targetList)+1] = targetInfo.Id
 --        targetPositionList[table.getn(targetPositionList)] = targetPosition
     end
     local tableLen = table.getn(targetList)
