@@ -48,6 +48,12 @@ function Propulsion:turnEverythingOn(I)
     end
 end
 
+function Propulsion:turnEverythingOff(I)
+    for i = 0, 11, 1 do
+        I:RequestThrustControl(i, 0)
+    end
+end
+
 function Propulsion:logPropulsion(I)
     I:Component_GetCount(9)
     for i = 0, I:Component_GetCount(9), 1 do
@@ -142,31 +148,105 @@ end
 
 function Propulsion:update(I, targetPosition, orientation)
     -- (,vertical,)
+    local newPosition = Vector3(targetPosition.x, targetPosition.y + Mathf.Max(abs(targetPosition.x), abs(targetPosition.y)), targetPosition.z)
+    updateRotational(I, orientation)
     updateAngular(I, targetPosition)
 end
 
 function updateAngular(I, targetPosition)
     -- (,vertical,)
-    local vectorToTarget = I:GetConstructCenterOfMass() - targetPosition
-    logVector(I, targetPosition, "target ")
-    logVector(I, I:GetConstructCenterOfMass(), "position ")
-    logVector(I, vectorToTarget, "to target ")
+    local vectorToTarget = targetPosition - I:GetConstructCenterOfMass()
+    vectorToTarget = Vector3(vectorToTarget.x, vectorToTarget.y + Mathf.Max(abs(vectorToTarget.x), abs(vectorToTarget.y)), vectorToTarget.z)
+--    logVector(I, targetPosition, "target ")
+--    logVector(I, I:GetConstructCenterOfMass(), "position ")
+--    logVector(I, vectorToTarget, "to target ")
     setNormalizedThrust(I, vectorToTarget, I:GetConstructRightVector(), 2, 3)
-    setNormalizedThrust(I, vectorToTarget, I:GetConstructUpVector(), 4, 5)
+    setNormalizedThrust(I, vectorToTarget, I:GetConstructUpVector(), 4, 5) -- up down
     setNormalizedThrust(I, vectorToTarget, I:GetConstructForwardVector(), 0, 1)
 
 end
 
 function setNormalizedThrust(I, vector, projectionVector, posThrust, negThrust)
+    -- distance
+    local projectedVector = Vector3.Project(vector, projectionVector)
+    local angleToTarget = angle(vector, projectionVector)
+    local delta = projectedVector.magnitude
+    if angleToTarget > 90 then
+        delta = delta * -1
+    end
+
+--    I:Log("delta " .. delta)
+
+    -- velocity
+    local velocityVector = I:GetVelocityVector()
+    local projectedVelocity = Vector3.Project(velocityVector, projectionVector)
+    local angleOfVelocity = angle(velocityVector, projectionVector)
+    local velocity = projectedVelocity.magnitude
+    if angleOfVelocity > 90 then
+        velocity = velocity * -1
+    end
+
+--    I:Log("projected velocity: " .. velocity)
+
+    -- thrust
+    local maxThrustDelta = 10
+    local thrust = Mathf.Min(Mathf.Pow(2, abs(delta)/2) - 1, 1)
+
+
+    local maxVelocity = 20
+
+    local desiredVelocity = Mathf.Min(Mathf.Pow(2, abs(delta)/maxThrustDelta) -1, 1)  * Mathf.Sign(delta) * maxVelocity
+--    thrust = Mathf.Pow(2, abs(desiredVelocity)/maxVelocity) -1
+
+--    thrust = abs(desiredVelocity/maxVelocity)
+    thrust = Mathf.Pow(2,abs(desiredVelocity) - 1)
+    I:Log(string.format("delta: %.2f, velocity: %.2f, thrust: %.2f, desiredVelocity: %.2f", delta, velocity, thrust, desiredVelocity))
+
+--    if (angleToTarget < 90) then
+    if velocity < desiredVelocity then
+--    if delta > 0 then
+        I:RequestThrustControl(posThrust, thrust)
+    else
+        I:RequestThrustControl(negThrust, thrust)
+    end
+end
+
+function updateRotational(I, target)
+    -- a point in front of me in space
+--    local pitch = normalizedAngle(I:GetConstructPitch())
+--    I:Log(pitch)
+--    if pitch < 0 then
+--        I:RequestThrustControl(10, pitch / 180)
+--    else
+--        I:RequestThrustControl(11, pitch / 180)
+--    end
+--    local pointInFront = I:GetConstructCenterOfMass() + (I:GetConstructForwardVector() * 100)
+--    local pointInFront = I:GetConstructCenterOfMass() + (Vector3.forward)
+--    logVector(I, I:GetConstructCenterOfMass(), "i am here ")
+--    logVector(I, pointInFront, "point in front ")
+--    local vectorToTarget = pointInFront - I:GetConstructCenterOfMass()
+--    logVector(I, vectorToTarget, "vector to target  ")
+--    setNormalizedRotation(I, Vector3.left, I:GetConstructUpVector(), 6, 7) -- roll (keep a point to the right of the craft perpendicular to up vector)
+--    setNormalizedRotation(I, Vector3.forward, I:GetConstructUpVector(), 10, 11) -- pitch (keep a point in front of the craft perpendicular to up vector)
+    setNormalizedRotation(I, Vector3.forward, I:GetConstructForwardVector(), 8, 9)
+end
+
+function setNormalizedRotation(I, vector, projectionVector, posThrust, negThrust)
     local projectedVector = Vector3.Project(vector, projectionVector)
 
     local delta = projectedVector.magnitude
-    local maxThrustDelta = 50
+    local maxThrustDelta = 10
 
-    local thrust = Mathf.Max(MathF.pow(2, delta/maxThrustDelta) - 1, 1)
+--    local thrust = Mathf.Min(Mathf.Pow(2, delta/maxThrustDelta) - 1, 1)
+    --    I:Log("delta " .. delta .. " thrust " .. thrust)
 
-    local a = angle(vector, projectionVector)
-    if (a < 90) then
+    local a = normalizedAngle( angle(vector, projectionVector) - 90)
+--    local thrust = Mathf.Pow(2, projectedVector.magnitude) - 1
+    local thrust = Mathf.Min(Mathf.Pow(2, abs(a / 90)) - 1, .4)
+    local thrust = (Mathf.Pow(2, abs(a / 90)) - 1)
+    I:Log("thrust " .. thrust)
+    I:Log("angle " .. a)
+    if (a < 0) then
         I:RequestThrustControl(negThrust, thrust)
     else
         I:RequestThrustControl(posThrust, thrust)
@@ -191,12 +271,14 @@ function Update(I)
         propulsion = Propulsion:new(I)
         --        propulsion:logPropulsion(I)
     end
+--    propulsion:turnEverythingOff(I)
+    local home = Vector3(-80,200,-200)
+    local farAway = Vector3(0, 200, 500)
+    propulsion:update(I, farAway, Vector3(0, 1, 0))
 
-    propulsion:update(I, Vector3(0,200,0), Vector3(0, 180, 0))
-    --    propulsion:turnEverythingOn(I)
-    --    I:Component_SetFloatLogicAll(9, 0)
-    --
-    --    Propulsion:setDesiredOrientation(I, 0, 180, 0)
+--    I:RequestThrustControl(2, 1)
+--    I:RequestThrustControl(2)
+--    I:RequestThrustControl(9, -1)
 
     I:Log(clock:curTick())
 end
